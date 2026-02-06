@@ -1,0 +1,158 @@
+/* Emotion Detection App Styles */
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Animation for result card */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-animate {
+  animation: slideIn 0.4s ease-out;
+}
+
+/* Pulse animation for loading */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.15);
+}
+
+/* Emotion color classes */
+.emotion-happiness {
+  --emotion-color: #FFD700;
+}
+
+.emotion-anger {
+  --emotion-color: #DC143C;
+}
+
+.emotion-sadness {
+  --emotion-color: #4169E1;
+}
+
+.emotion-stress {
+  --emotion-color: #FF8C00;
+}
+
+.emotion-neutral {
+  --emotion-color: #808080;
+}
+
+/* Progress bar customization */
+.progress-custom {
+  background: linear-gradient(90deg, var(--emotion-color, #6366f1) 0%, var(--emotion-color, #a855f7) 100%);
+}
+
+/* Focus styles */
+textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Button press effect */
+button:active {
+  transform: scale(0.98);
+}
+
+/* Badge transitions */
+badge {
+  transition: all 0.2s ease;
+}
+
+/* History item hover */
+.history-item {
+  transition: all 0.2s ease;
+}
+
+.history-item:hover {
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .sample-texts {
+    display: none;
+  }
+}
+
+/* Dark mode adjustments */
+.dark .bg-slate-50 {
+  background-color: rgba(30, 41, 59, 0.5);
+}
+
+/* Print styles */
+@media print {
+  header, footer, .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+}
