@@ -1,0 +1,1351 @@
+"""
+Emotion Detection Model Training Pipeline
+==========================================
+This script trains a machine learning model for detecting emotions from text.
+Emotions detected: Happiness, Anger, Sadness, Stress, Neutral
+
+Author: Fahad Ullah Data Scientist
+Date: 2026-02-06
+"""
+
+import pandas as pd
+import numpy as np
+import re
+import pickle
+import os
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, 
+                             f1_score, classification_report)
+import warnings
+warnings.filterwarnings('ignore')
+
+# Simple preprocessing without NLTK dependency
+def preprocess_text(text):
+    """
+    Comprehensive text preprocessing pipeline.
+    
+    Args:
+        text (str): Raw input text
+        
+    Returns:
+        str: Preprocessed text
+    """
+    if not isinstance(text, str):
+        return ""
+    
+    # Convert to lowercase
+    text = text.lower()
+    
+    # Remove URLs
+    text = re.sub(r'http\S+|www\S+|https\S+', '', text, flags=re.MULTILINE)
+    
+    # Remove user mentions and hashtags
+    text = re.sub(r'@\w+|#\w+', '', text)
+    
+    # Remove special characters and numbers, keep only letters and spaces
+    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Simple tokenization and stopword removal
+    stop_words = {'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 
+                  'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 
+                  'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 
+                  'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 
+                  'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 
+                  'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 
+                  'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 
+                  'at', 'by', 'for', 'with', 'through', 'during', 'before', 'after', 'above', 
+                  'below', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 
+                  'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 
+                  'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 
+                  'no', 'nor', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 
+                  'can', 'will', 'just', 'don', 'should', 'now', 'd', 'll', 'm', 'o', 're', 
+                  've', 'y', 'ain', 'aren', 'couldn', 'didn', 'doesn', 'hadn', 'hasn', 'haven', 
+                  'isn', 'ma', 'mightn', 'mustn', 'needn', 'shan', 'shouldn', 'wasn', 'weren', 
+                  'won', 'wouldn'}
+    
+    tokens = text.split()
+    processed_tokens = [token for token in tokens if token not in stop_words and len(token) > 2]
+    
+    return ' '.join(processed_tokens)
+
+
+def create_sample_dataset():
+    """
+    Create a comprehensive emotion dataset for training.
+    
+    Returns:
+        pd.DataFrame: Dataset with 'text' and 'emotion' columns
+    """
+    data = {
+        'happiness': [
+    "I am so happy today! Everything is going great.",
+    "This is the best day of my life!",
+    "I love this so much! It makes me so joyful.",
+    "Feeling wonderful and excited about the future!",
+    "What a beautiful moment! I am so glad!",
+    "So delighted to hear this amazing news!",
+    "I am thrilled about this opportunity!",
+    "This makes me incredibly happy and grateful!",
+    "Feeling blessed and content right now!",
+    "Absolutely fantastic! Couldn't be happier!",
+    "My heart is full of joy and happiness!",
+    "This is exactly what I needed! So happy!",
+    "Wonderful news! I am celebrating!",
+    "Everything is perfect! Life is beautiful!",
+    "I am smiling from ear to ear! So good!",
+    "Such a pleasant surprise! Makes me happy!",
+    "I feel amazing and full of energy!",
+    "This brings me so much joy and peace!",
+    "Couldn't ask for anything better! Happy!",
+    "Pure bliss! I am so grateful for this!",
+    "Today is a fantastic day! Feeling great!",
+    "I am overjoyed with this outcome!",
+    "This success makes me incredibly happy!",
+    "Feeling on top of the world right now!",
+    "What a wonderful experience! So happy!",
+    "The sun is shining and I feel so cheerful!",
+    "I can't stop smiling, everything is perfect!",
+    "Life feels so bright and exciting today!",
+    "I feel so uplifted and joyful right now!",
+    "My happiness is overflowing today!",
+    "I am thrilled and overjoyed with life!",
+    "Such a beautiful day fills me with happiness!",
+    "I feel light and happy, everything is great!",
+    "This little success makes my heart sing!",
+    "Feeling ecstatic about this wonderful news!",
+    "Happiness is in the air, and I feel it!",
+    "My day is filled with smiles and laughter!",
+    "I feel so joyful and at peace with life!",
+    "Every moment today brings me happiness!",
+    "I am dancing with joy inside!",
+    "Life is amazing and I feel it deeply!",
+    "This achievement brings me immense joy!",
+    "Feeling euphoric about the future ahead!",
+    "I am so happy, my heart is smiling!",
+    "The joy I feel today is indescribable!",
+    "Feeling radiant and full of happiness!",
+    "This little moment brings me pure bliss!",
+    "I am smiling because life is wonderful!",
+    "So happy to see all my dreams coming true!",
+    "My heart feels so light and cheerful today!",
+    "Everything seems perfect and delightful!",
+    "I am enjoying every single moment right now!",
+    "Feeling completely joyful and alive!",
+    "Today is filled with laughter and smiles!",
+    "I am full of energy and happiness!",
+    "Such a glorious day makes me feel ecstatic!",
+    "I feel amazing, everything is working out!",
+    "My spirit is soaring with happiness today!",
+    "Nothing can bring me down today!",
+    "I am radiating happiness and positivity!",
+    "Feeling joyous and thankful for everything!",
+    "What a perfect day to be alive and happy!",
+    "I am filled with gratitude and joy!",
+    "Everything around me makes me smile today!",
+    "Life is so wonderful, I feel blessed!",
+    "I am thrilled by all the good news today!",
+    "Feeling exuberant and full of life!",
+    "I can't contain my happiness right now!",
+    "I am glowing with joy and excitement!",
+    "This moment makes me feel absolutely happy!",
+    "I feel a rush of happiness all over!",
+    "What an incredible day! I am ecstatic!",
+    "I am filled with delight and joy today!",
+    "Feeling completely satisfied and happy!",
+    "I am enjoying life to the fullest right now!",
+    "Such amazing things are happening, I am happy!",
+    "I feel so positive and cheerful today!",
+    "My heart is singing with happiness!",
+    "I am overjoyed and full of energy!",
+    "Today is magical, and I feel so happy!",
+    "I am laughing with pure joy!",
+    "Happiness surrounds me, and I feel it deeply!",
+    "Everything is going wonderfully today!",
+    "I am so content and joyful right now!",
+    "I feel like smiling endlessly today!",
+    "Feeling bright, happy, and alive!",
+    "I am grateful for this happy moment!",
+    "I am walking on clouds of happiness!",
+    "Life has never felt this amazing!",
+    "I feel uplifted and completely happy!",
+    "I am enjoying the simple joys of life!",
+    "This is a beautiful, happy day!",
+    "I am smiling because everything feels right!",
+    "Feeling blissful and cheerful!",
+    "I am radiating joy and positivity today!",
+    "Everything is going my way, feeling happy!",
+    "I feel euphoric and unstoppable today!",
+    "I am rejoicing in this wonderful moment!",
+    "I am overflowing with happiness and gratitude!",
+    "This day is amazing, and I am so happy!",
+    "I feel unstoppable and full of joy!",
+    "I am bubbling with excitement and happiness!",
+    "Life is beautiful, and I am smiling!",
+    "Feeling elated and completely thrilled!",
+    "I am savoring every happy moment!",
+    "Happiness is filling every corner of my heart!",
+    "I am jumping for joy today!",
+    "I feel energetic, positive, and happy!",
+    "This joy is spreading all around me!",
+    "I am delighted beyond words today!",
+    "Life feels amazing, and I am grateful!",
+    "I am thrilled to see such wonderful results!",
+    "I feel blessed to experience this happiness!",
+    "Today is perfect, and I am overjoyed!",
+    "I am completely ecstatic and joyful!",
+    "I feel light-hearted and cheerful today!",
+    "Happiness fills my heart to the brim!",
+    "I am rejoicing in every single moment!",
+    "I feel a surge of joy running through me!",
+    "Life is fantastic, and I feel amazing!",
+    "I am beaming with happiness right now!",
+    "I feel thrilled and over the moon today!",
+    "This wonderful moment makes me so happy!",
+    "I feel joyful and exuberant inside!",
+    "I am enjoying this beautiful day immensely!",
+    "I feel alive and completely happy today!",
+    "Everything feels perfect and joyful today!",
+    "I am filled with positive energy and happiness!",
+    "I feel like the luckiest person alive today!",
+    "I am smiling endlessly, feeling euphoric!",
+    "Life is full of happiness, and I feel it!",
+    "I am overjoyed by all the good things today!",
+    "I feel ecstatic and thrilled about life!",
+    "Today is magical, and my heart is full of joy!",
+    "I am filled with cheerful energy and bliss!",
+    "I feel blissful and completely satisfied!",
+    "I am celebrating life and feeling happy!",
+    "I feel delighted by all the beautiful moments!",
+    "Life is amazing, and I am so grateful today!",
+    "I feel thrilled and overjoyed by everything!",
+    "I am basking in happiness and positivity!",
+    "I feel completely cheerful and content today!",
+    "I am enjoying every joyful moment to the fullest!",
+    "Happiness is all around me, and I feel it deeply!",
+    "I am ecstatic about the wonderful news!",
+    "I feel cheerful, light-hearted, and happy!",
+    "I am overflowing with joyous energy!",
+    "Life is beautiful, and I feel incredible!",
+    "I am happy beyond words today!",
+    "I feel delighted and euphoric inside!",
+    "I am celebrating all the small joys of life!",
+    "Today is perfect, and I am enjoying it fully!",
+    "I feel joyful and light as a feather!",
+    "I am thrilled and bubbling with happiness!",
+    "Happiness is my constant companion today!",
+    "I feel grateful, ecstatic, and happy!",
+    "I am smiling because everything is wonderful!",
+    "Life feels joyous and fulfilling today!",
+    "I am delighted with this fantastic outcome!",
+    "I feel cheerful, blissful, and thankful!",
+    "I am dancing with happiness inside!",
+    "I feel amazing, joyful, and alive!",
+    "Life is vibrant, and I am enjoying every moment!",
+    "I am overjoyed and filled with positive energy!",
+    "I feel thrilled and completely joyful!",
+    "I am experiencing pure happiness today!",
+    "I feel radiant, happy, and full of energy!",
+    "Life is delightful, and I am so happy!",
+    "I am smiling from the heart today!",
+    "I feel ecstatic and full of life energy!",
+    "I am rejoicing in this beautiful experience!",
+    "I feel completely joyful and thankful!",
+    "Life is fantastic, and I feel amazing today!",
+    "I am delighted and feeling euphoric!",
+    "I feel cheerful, content, and happy right now!",
+    "I am overjoyed by this wonderful moment!",
+    "Life is bright, and I feel incredible today!",
+    "I am bubbling with happiness and delight!",
+    "I feel thrilled, ecstatic, and grateful!",
+    "I am enjoying every little joy life gives me!",
+    "I feel light-hearted, cheerful, and blissful!",
+    "I am smiling with pure joy and gratitude!",
+    "Life feels magical, and I am thrilled!",
+    "I am experiencing immense happiness today!",
+    "I feel delighted, content, and positive!",
+    "I am overjoyed and celebrating life fully!",
+    "I feel energized, happy, and exuberant!",
+    "Life is wonderful, and I am so thrilled!",
+    "I am filled with bliss, joy, and positivity!",
+    "I feel euphoric and delighted all over!",
+    "I am rejoicing in this perfect day!",
+    "I feel cheerful, ecstatic, and alive!",
+    "I am smiling endlessly with pure happiness!",
+    "Life feels amazing, and I am overjoyed today!",
+    "I am thrilled, happy, and full of gratitude!",
+    "I feel blissful, radiant, and ecstatic!",
+    "I am rejoicing in every beautiful moment today!",
+    "I feel cheerful, positive, and completely happy!",
+    "Life is joyful, and I am enjoying every second!",
+    "I am overjoyed and bubbling with excitement!",
+    "I feel thrilled, exuberant, and thankful today!",
+    "I am experiencing pure joy and happiness right now!",
+    "I feel delighted, cheerful, and completely content!",
+    "Life is fantastic, and I am celebrating it!",
+    "I am ecstatic, thrilled, and full of bliss!",
+    "I feel euphoric, happy, and light-hearted today!",
+    "I am rejoicing in the beauty and happiness around me!",
+    "I feel cheerful, jubilant, and filled with positive energy!",
+    "Life is amazing, and I am enjoying it to the fullest!"
+  ],
+          'anger': [
+    "I am so angry right now! This is unacceptable!",
+    "How dare they do this to me! I am furious!",
+    "This makes me so mad! I can't believe it!",
+    "I am absolutely livid about this situation!",
+    "This is infuriating! I want to scream!",
+    "I hate this so much! It makes me angry!",
+    "This is ridiculous! I am so annoyed!",
+    "I can't stand this anymore! So frustrated!",
+    "This is driving me crazy! I am mad!",
+    "I am outraged by this behavior! Unacceptable!",
+    "This makes my blood boil! So angry!",
+    "I am fuming right now! How could they!",
+    "This is so irritating! I am enraged!",
+    "I want to break something! So angry!",
+    "This is beyond frustrating! I am furious!",
+    "I am sick and tired of this! Angry!",
+    "This is maddening! I can't control my anger!",
+    "I am so pissed off right now! Damn it!",
+    "This is provoking me! I am very angry!",
+    "I feel like exploding! So much rage!",
+    "This is offensive and makes me angry!",
+    "I am wrathful about this injustice!",
+    "This is exasperating! I am so mad!",
+    "I am boiling with anger right now!",
+    "This is intolerable! I am furious!",
+    "I can't believe this! I am absolutely furious!",
+    "This stupidity is making me angry!",
+    "I am so mad I could scream!",
+    "This behavior is unacceptable and infuriating!",
+    "I feel like hitting something right now!",
+    "This nonsense is driving me insane!",
+    "I am annoyed beyond measure!",
+    "This is making me lose my temper!",
+    "I can't take this any longer! Furious!",
+    "This injustice makes my blood boil!",
+    "I am fuming over this ridiculous situation!",
+    "This is outrageous! I am mad!",
+    "I feel such rage right now!",
+    "I am seething with anger and frustration!",
+    "This is completely unacceptable! I am angry!",
+    "I am beyond frustrated with this situation!",
+    "This makes me see red! Furious!",
+    "I can't tolerate this nonsense anymore!",
+    "This behavior is maddening!",
+    "I am furious beyond words!",
+    "This makes me want to shout in anger!",
+    "I am irritated to the max right now!",
+    "This is so enraging! I can't stay calm!",
+    "I am boiling with rage over this!",
+    "This is unbelievably frustrating!",
+    "I am livid and can't contain my anger!",
+    "This situation is making me furious!",
+    "I am utterly frustrated with this nonsense!",
+    "This is maddening beyond belief!",
+    "I am enraged and upset right now!",
+    "This is beyond irritating! I am furious!",
+    "I am angry and can't control myself!",
+    "This is infuriating beyond words!",
+    "I am frustrated to the core!",
+    "This is so aggravating! I feel rage!",
+    "I can't believe this stupidity! Furious!",
+    "I am seeing red right now!",
+    "This situation is making me furious and frustrated!",
+    "I am boiling mad over this!",
+    "This nonsense is making me lose it!",
+    "I am exasperated beyond measure!",
+    "This is ridiculous and makes me angry!",
+    "I feel furious and annoyed!",
+    "I am fuming at this situation!",
+    "This makes me so mad I can't speak!",
+    "I am absolutely enraged right now!",
+    "This is intolerable and maddening!",
+    "I am extremely angry and frustrated!",
+    "This makes me want to punch something!",
+    "I am beyond mad right now!",
+    "This is outrageous and unacceptable!",
+    "I feel anger boiling inside me!",
+    "I am madder than I have ever been!",
+    "This nonsense is driving me crazy with anger!",
+    "I am furious at this injustice!",
+    "This is aggravating and infuriating!",
+    "I am mad and want to shout!",
+    "This makes me angry beyond reason!",
+    "I am irritated and enraged!",
+    "This is provoking me beyond limits!",
+    "I feel like smashing something!",
+    "I am utterly furious at this situation!",
+    "This is maddening! I can't deal with it!",
+    "I am boiling over with frustration!",
+    "This makes me so mad I could explode!",
+    "I am extremely annoyed and angry!",
+    "This is beyond frustrating and infuriating!",
+    "I can't stand this anymore! Furious!",
+    "This makes my blood boil uncontrollably!",
+    "I am mad and can't calm down!",
+    "This situation is absolutely maddening!",
+    "I feel rage building up inside me!",
+    "I am fuming and seething with anger!",
+    "This is provoking me immensely!",
+    "I am enraged and extremely frustrated!",
+    "This is intolerable! I am boiling mad!",
+    "I am mad beyond belief!",
+    "This makes me see red with anger!",
+    "I am extremely frustrated and furious!",
+    "This is maddening and irritating!",
+    "I can't deal with this nonsense! Furious!",
+    "I am furious at this behavior!",
+    "This is so aggravating I could scream!",
+    "I am enraged beyond measure!",
+    "This makes me want to yell and scream!",
+    "I am fuming and completely mad!",
+    "This situation is unbearable! I am angry!",
+    "I am boiling with rage and fury!",
+    "This is utterly frustrating and maddening!",
+    "I am livid and enraged right now!",
+    "This is beyond irritating and unacceptable!",
+    "I am mad and completely frustrated!",
+    "This makes me want to break something!",
+    "I am furious and can't contain myself!",
+    "This situation is outrageous! I am mad!",
+    "I am exasperated and seething!",
+    "This is driving me insane with anger!",
+    "I am angry and outraged!",
+    "This is maddening beyond belief!",
+    "I am furious and irritated!",
+    "This nonsense is making me madder!",
+    "I am enraged and want to scream!",
+    "This is extremely frustrating and unacceptable!",
+    "I am boiling with anger and fury!",
+    "This makes me livid and mad!",
+    "I am furious and can't tolerate this!",
+    "This is provoking my anger immensely!",
+    "I am extremely mad right now!",
+    "This situation is so irritating I want to explode!",
+    "I am furious and utterly frustrated!",
+    "This is maddening beyond words!",
+    "I am enraged and can't calm down!",
+    "This makes my blood boil with rage!",
+    "I am mad and extremely upset!",
+    "This is unacceptable and infuriating!",
+    "I am fuming at this ridiculous situation!",
+    "This nonsense is intolerable! Furious!",
+    "I am extremely angry and outraged!",
+    "This is maddening and provoking!",
+    "I am boiling over with frustration and anger!",
+    "This is so irritating it makes me mad!",
+    "I am furious beyond comprehension!",
+    "This is outrageous and makes me angry!",
+    "I am enraged and mad beyond words!",
+    "This is provoking my rage immensely!",
+    "I am mad and can't stay calm!",
+    "This is beyond frustrating and unacceptable!",
+    "I am extremely annoyed and enraged!",
+    "This is maddening and I want to scream!",
+    "I am furious and boiling with anger!",
+    "This situation is intolerable and maddening!",
+    "I am enraged and can't contain it!",
+    "This is infuriating and maddening!",
+    "I am angry beyond reason!",
+    "This is ridiculous and makes me furious!",
+    "I am mad and seething!",
+    "This makes me want to shout in rage!",
+    "I am livid and frustrated!",
+    "This is provoking me beyond belief!",
+    "I am furious and completely irritated!",
+    "This situation is maddening and outrageous!",
+    "I am enraged beyond measure!",
+    "This nonsense is driving me mad!",
+    "I am mad and can't deal with it!",
+    "This is extremely frustrating and irritating!",
+    "I am boiling with rage right now!",
+    "This is intolerable and makes me angry!",
+    "I am furious and completely mad!",
+    "This situation is outrageous and maddening!",
+    "I am enraged and extremely frustrated!",
+    "This makes me madder than ever!",
+    "I am mad and want to scream!",
+    "This is provoking me and infuriating!",
+    "I am furious and can't stay calm!",
+    "This situation is maddening and irritating!",
+    "I am enraged beyond words!",
+    "This makes me boil with anger!",
+    "I am furious and seething with rage!",
+    "This is unacceptable and maddening!",
+    "I am mad and completely furious!",
+    "This nonsense is driving me insane!",
+    "I am enraged and can't control myself!",
+    "This is maddening and I am furious!",
+    "I am furious and extremely irritated!",
+    "This situation is intolerable and infuriating!",
+    "I am mad beyond comprehension!",
+    "This makes me extremely angry!",
+    "I am enraged and want to shout!",
+    "This is provoking my rage!",
+    "I am furious and boiling over!",
+    "This is maddening and unacceptable!",
+    "I am enraged and mad beyond words!",
+    "This situation is outrageous and maddening!",
+    "I am mad and completely furious!",
+    "This is infuriating and I can't tolerate it!",
+    "I am boiling with anger and frustration!",
+    "This is maddening and I want to explode!",
+    "I am furious and enraged beyond measure!",
+    "This is provoking me and making me furious!",
+    "I am mad and completely seething!",
+    "This situation is intolerable and maddening!",
+    "I am enraged and want to scream!",
+    "This is beyond frustrating and infuriating!",
+    "I am furious and mad beyond words!",
+    "This makes me boil with rage and anger!",
+    "I am mad and extremely frustrated!",
+    "This is unacceptable and outrageous!",
+    "I am enraged and fuming with anger!",
+    "This situation is maddening and provoking!",
+    "I am furious and can't calm down!",
+    "This is maddening beyond belief!",
+    "I am enraged and extremely mad!",
+    "This nonsense is intolerable and infuriating!",
+    "I am mad and seething with anger!",
+    "This makes me furious and enraged!",
+    "I am boiling over with rage!",
+    "This situation is outrageous and maddening!",
+    "I am enraged and mad beyond measure!",
+    "This is infuriating and I can't tolerate it!"
+  ],
+        'sadness': [
+    "I feel so sad and empty inside.",
+    "This breaks my heart. I want to cry.",
+    "I am so depressed and lonely right now.",
+    "Nothing feels good anymore. I am sad.",
+    "I miss them so much. It hurts.",
+    "This is devastating. I am heartbroken.",
+    "I feel hopeless and miserable.",
+    "Tears won't stop falling. So sad.",
+    "I am grieving and it feels endless.",
+    "This pain is unbearable. So depressed.",
+    "I feel lost and alone in this world.",
+    "My heart is heavy with sorrow.",
+    "I am drowning in my own sadness.",
+    "This is the worst feeling ever. So sad.",
+    "I feel worthless and unloved.",
+    "Everything is falling apart. Depressed.",
+    "I can't stop crying. So heartbroken.",
+    "This loss is too much to bear.",
+    "I feel empty and numb inside.",
+    "My soul is aching with sadness.",
+    "I am overwhelmed with grief.",
+    "This is tearing me apart inside.",
+    "I feel so down and defeated.",
+    "The sadness is consuming me.",
+    "I am hurting so much right now.",
+
+    "I feel emotionally drained and broken.",
+    "My heart feels shattered into pieces.",
+    "I feel like crying all the time.",
+    "This sadness feels endless and deep.",
+    "I feel abandoned and alone.",
+    "Nothing brings me joy anymore.",
+    "I am sinking into sadness.",
+    "I feel emotionally exhausted and empty.",
+    "My heart feels painfully heavy.",
+    "I am struggling with deep sorrow.",
+    "I feel disconnected from everything.",
+    "This pain won’t leave me alone.",
+    "I feel forgotten and insignificant.",
+    "My sadness keeps growing stronger.",
+    "I feel broken beyond repair.",
+    "I am trapped in this sadness.",
+    "Everything feels dark and meaningless.",
+    "I feel tired of pretending to be okay.",
+    "My heart hurts so much.",
+    "I feel lost in my own thoughts.",
+    "This sadness feels suffocating.",
+    "I feel lonely even around people.",
+    "I am emotionally shattered.",
+    "I feel hollow and drained inside.",
+    "This pain keeps haunting me.",
+
+    "I feel deeply hurt and disappointed.",
+    "Sadness has taken over my heart.",
+    "I feel like giving up sometimes.",
+    "Nothing seems worth it anymore.",
+    "I feel emotionally weak and fragile.",
+    "My heart aches constantly.",
+    "I feel hopeless about the future.",
+    "This sadness is overwhelming me.",
+    "I feel stuck in emotional pain.",
+    "I am tired of feeling this way.",
+    "I feel unseen and unheard.",
+    "My tears come without warning.",
+    "I feel crushed by sadness.",
+    "Everything feels heavy and slow.",
+    "I feel broken inside my chest.",
+    "This sadness feels endless.",
+    "I feel emotionally numb and cold.",
+    "My heart feels painfully empty.",
+    "I feel lost without direction.",
+    "This sorrow won’t let me breathe.",
+
+    "I am consumed by sadness.",
+    "I feel emotionally isolated.",
+    "My pain feels invisible to others.",
+    "I feel exhausted by my emotions.",
+    "This sadness keeps pulling me down.",
+    "I feel like I'm falling apart.",
+    "My heart is full of pain.",
+    "I feel deeply unhappy and hurt.",
+    "This emptiness is unbearable.",
+    "I feel disconnected from happiness.",
+    "My sadness feels uncontrollable.",
+    "I feel crushed by emotional pain.",
+    "Nothing feels comforting anymore.",
+    "I feel hopeless and drained.",
+    "This sorrow keeps haunting my mind.",
+    "I feel like crying endlessly.",
+    "My heart feels painfully fragile.",
+    "I feel lost in sadness.",
+    "This pain feels permanent.",
+    "I feel emotionally shattered.",
+
+    "I feel deeply sorrowful and broken.",
+    "Sadness weighs heavily on my heart.",
+    "I feel mentally and emotionally drained.",
+    "My heart aches with loneliness.",
+    "I feel overwhelmed by despair.",
+    "This sadness feels never-ending.",
+    "I feel abandoned and forgotten.",
+    "My emotions feel too heavy to carry.",
+    "I feel hopeless and defeated.",
+    "This pain keeps pulling me down.",
+    "I feel emotionally unstable and sad.",
+    "My heart feels constantly heavy.",
+    "I feel buried under sadness.",
+    "This grief feels too strong.",
+    "I feel emotionally weak and tired.",
+    "Sadness has taken control of me.",
+    "I feel like I'm breaking inside.",
+    "My tears won’t stop falling.",
+    "I feel deeply unhappy and lost.",
+    "This sorrow consumes my thoughts.",
+
+    "I feel like happiness has left me.",
+    "My heart feels painfully lonely.",
+    "I feel emotionally exhausted every day.",
+    "This sadness makes everything dull.",
+    "I feel trapped in my emotions.",
+    "My heart aches with every thought.",
+    "I feel drained by constant sadness.",
+    "This pain is hard to survive.",
+    "I feel hopeless and empty.",
+    "Sadness has darkened my thoughts.",
+    "I feel emotionally crushed.",
+    "My heart feels broken and weak.",
+    "I feel like crying for no reason.",
+    "This sadness follows me everywhere.",
+    "I feel deeply sorrowful inside.",
+    "I am tired of feeling sad.",
+    "This emotional pain won’t fade.",
+    "I feel alone in my suffering.",
+    "My heart feels unbearably heavy.",
+    "I feel defeated by sadness.",
+
+    "I feel emotionally hollow and lost.",
+    "Sadness has taken over my life.",
+    "I feel mentally drained and broken.",
+    "This pain is deeply overwhelming.",
+    "I feel stuck in sorrow.",
+    "My heart feels painfully silent.",
+    "I feel emotionally fragile and sad.",
+    "This sadness drains all my energy.",
+    "I feel crushed by disappointment.",
+    "My heart feels constantly heavy.",
+    "I feel hopeless in my sadness.",
+    "This grief feels suffocating.",
+    "I feel emotionally worn out.",
+    "Sadness fills my every thought.",
+    "I feel broken and alone.",
+    "My heart aches endlessly.",
+    "I feel emotionally defeated.",
+    "This sorrow won’t let go.",
+    "I feel deeply unhappy inside.",
+    "Sadness has numbed my soul.",
+
+    "I feel lost in emotional pain.",
+    "This sadness feels overwhelming.",
+    "My heart feels shattered and weak.",
+    "I feel drained and sorrowful.",
+    "Sadness keeps pulling me down.",
+    "I feel emotionally torn apart.",
+    "This pain feels unbearable.",
+    "I feel empty despite everything.",
+    "My heart feels broken inside.",
+    "I feel hopeless and sad.",
+    "This sorrow weighs me down.",
+    "I feel deeply hurt emotionally.",
+    "Sadness consumes my thoughts.",
+    "I feel mentally exhausted and sad.",
+    "My heart aches with grief.",
+    "I feel trapped in sadness.",
+    "This pain is emotionally draining.",
+    "I feel overwhelmed and broken.",
+    "Sadness clouds my mind.",
+    "I feel emotionally lost.",
+
+    "I feel shattered emotionally.",
+    "Sadness has taken all my strength.",
+    "I feel deeply alone inside.",
+    "My heart feels painfully heavy.",
+    "I feel emotionally crushed and tired.",
+    "This sorrow feels endless.",
+    "I feel drained and hopeless.",
+    "Sadness has taken over my emotions.",
+    "I feel broken beyond words.",
+    "My heart feels empty and cold.",
+    "I feel deeply depressed.",
+    "This pain won’t leave me.",
+    "I feel emotionally exhausted.",
+    "Sadness fills my heart.",
+    "I feel hopeless and shattered.",
+    "My emotions feel too heavy.",
+    "I feel trapped in sorrow.",
+    "This sadness hurts deeply.",
+    "I feel emotionally defeated.",
+    "Sadness consumes my soul."
+  ],
+        'stress': [
+    "I am so stressed out right now! Can't handle this!",
+    "This is too much pressure! I am overwhelmed!",
+    "I can't cope with all this stress! Help!",
+    "My anxiety is through the roof! So stressed!",
+    "I am freaking out! Too much to handle!",
+    "This is causing me so much tension!",
+    "I am worried sick about everything!",
+    "The stress is eating me alive!",
+    "I can't take this pressure anymore!",
+    "I am so anxious and stressed out!",
+    "This is making me panic! So stressed!",
+    "I feel like I'm drowning in stress!",
+    "My nerves are shot! So anxious!",
+    "This is keeping me up at night! Stressed!",
+    "I am tense and worried constantly!",
+    "The pressure is too intense! Stressed!",
+    "I am having a breakdown! So stressed!",
+    "This is triggering my anxiety! Help!",
+    "I feel restless and on edge! Stressed!",
+    "The workload is crushing me! Anxious!",
+    "I am frazzled and can't focus!",
+    "This is making me nervous wreck!",
+    "I am jittery and stressed out!",
+    "The deadlines are killing me! Stressed!",
+    "I am under so much strain! Help!",
+
+    "I feel completely overwhelmed and anxious.",
+    "My mind won't stop racing with stress.",
+    "I can't handle all this pressure anymore.",
+    "This tension is making me feel sick.",
+    "I feel completely burnt out right now.",
+    "I am stressed beyond my limits.",
+    "This anxiety is unbearable!",
+    "I feel like I am about to snap.",
+    "I am so tense, I can't relax at all.",
+    "The pressure is crushing me mentally.",
+    "I am on edge all the time.",
+    "I feel like I am drowning in deadlines.",
+    "Stress is taking over my life.",
+    "I am constantly anxious and worried.",
+    "I feel overwhelmed by everything around me.",
+    "My mind is spiraling out of control.",
+    "I can't breathe from all this stress.",
+    "I am mentally exhausted and tense.",
+    "I feel like collapsing from all the pressure.",
+    "I am stressed and can't focus on anything.",
+    "This constant anxiety is exhausting me.",
+    "I feel restless and unsettled.",
+    "My nerves are completely shot.",
+    "I am frazzled and overwhelmed.",
+    "I can't stop worrying about everything.",
+
+    "I feel on the brink of a breakdown.",
+    "Stress is consuming my thoughts.",
+    "I feel jittery and uneasy all the time.",
+    "My mind is in overdrive from tension.",
+    "I am overwhelmed and frazzled.",
+    "I feel anxious and mentally drained.",
+    "I can't cope with all the pressure.",
+    "My heart races with stress constantly.",
+    "I feel mentally trapped and tense.",
+    "The workload is unbearable.",
+    "I am constantly tense and anxious.",
+    "I feel like I'm losing control.",
+    "This stress is affecting my health.",
+    "I feel mentally exhausted and restless.",
+    "I am anxious about every little thing.",
+    "I feel tense and on edge constantly.",
+    "My mind can't find peace.",
+    "I feel overworked and stressed out.",
+    "This tension is overwhelming me.",
+    "I can't manage all this stress alone.",
+
+    "I feel mentally exhausted from pressure.",
+    "My thoughts are consumed by anxiety.",
+    "I am tense and frazzled beyond belief.",
+    "I feel stressed from start to finish.",
+    "The constant pressure is unbearable.",
+    "I feel like I am under a mountain of stress.",
+    "I can't relax, I am so tense.",
+    "I feel anxious and overburdened.",
+    "My mind is in chaos from stress.",
+    "I am mentally drained and worried.",
+    "I feel restless and pressured.",
+    "I am tense and can't unwind at all.",
+    "This workload is killing my peace of mind.",
+    "I feel nervous and overworked.",
+    "I can't focus due to all this anxiety.",
+    "I am constantly frazzled and tense.",
+    "I feel stressed and under pressure all the time.",
+    "My mind keeps racing with tension.",
+    "I am anxious about everything that could go wrong.",
+    "I feel like I can't catch a break.",
+    
+    "The constant demands are overwhelming me.",
+    "I am on edge from too much stress.",
+    "I feel pressured and mentally exhausted.",
+    "This tension is suffocating.",
+    "I am jittery and can't relax at all.",
+    "I feel mentally overworked and anxious.",
+    "The anxiety is consuming me completely.",
+    "I am so tense, I feel like I might explode.",
+    "I feel stressed and restless all the time.",
+    "The pressure is affecting my sleep and health.",
+    "I am frazzled and can't think straight.",
+    "I feel overwhelmed with anxiety.",
+    "This stress is making me mentally exhausted.",
+    "I am anxious and frazzled constantly.",
+    "I feel mentally burdened and tense.",
+    "I can't cope with all this pressure alone.",
+    "I feel stressed from every angle.",
+    "The workload is mentally crushing me.",
+    "I am tense and anxious about everything.",
+    "I feel like I am drowning under all this stress.",
+    
+    "I am mentally strained and anxious.",
+    "I feel jittery and overwhelmed.",
+    "The constant pressure is unbearable.",
+    "I am tense and mentally exhausted.",
+    "I feel anxious and under too much stress.",
+    "I am frazzled and can't focus.",
+    "My mind feels trapped in anxiety.",
+    "I feel mentally and emotionally strained.",
+    "I am stressed from every responsibility.",
+    "The tension is making it hard to breathe.",
+    "I feel mentally overburdened and anxious.",
+    "I am constantly anxious and frazzled.",
+    "I feel like I can't keep up with anything.",
+    "The pressure is affecting my mental health.",
+    "I am stressed and constantly worried.",
+    "I feel mentally exhausted and pressured.",
+    "This anxiety is suffocating me.",
+    "I am tense and can't find relief.",
+    "I feel overworked and mentally strained.",
+    "I am constantly frazzled by stress.",
+    
+    "I feel mentally overwhelmed and exhausted.",
+    "The constant tension is unbearable.",
+    "I am stressed and can't cope with anything.",
+    "I feel anxious and mentally drained.",
+    "I am frazzled and overwhelmed constantly.",
+    "The pressure is crushing my mind.",
+    "I feel jittery and anxious all the time.",
+    "I am mentally exhausted from responsibilities.",
+    "This stress is taking a toll on me.",
+    "I feel tense and mentally burdened.",
+    "I am frazzled and mentally overworked.",
+    "I feel anxious and pressured constantly.",
+    "I am stressed to the point of breaking.",
+    "The mental strain is too much to handle.",
+    "I feel restless and mentally exhausted.",
+    "I am frazzled by all my responsibilities.",
+    "I feel mentally overworked and anxious.",
+    "The constant pressure is suffocating me.",
+    "I am stressed and mentally drained completely.",
+    "I feel tense, anxious, and overburdened.",
+    
+    "I am mentally exhausted and frazzled.",
+    "I feel anxious and under too much pressure.",
+    "The stress is consuming my thoughts entirely.",
+    "I am tense and can't find relief.",
+    "I feel mentally strained and anxious.",
+    "I am frazzled and overwhelmed by stress.",
+    "This constant tension is unbearable.",
+    "I feel mentally and emotionally exhausted.",
+    "I am stressed and can't focus on anything.",
+    "I feel anxious and mentally overworked.",
+    "I am frazzled by the workload and pressure.",
+    "The stress is affecting my entire day.",
+    "I feel tense and mentally drained constantly.",
+    "I am mentally overburdened and anxious.",
+    "I feel jittery and stressed beyond belief.",
+    "I am frazzled and can't relax at all.",
+    "I feel mentally trapped in stress.",
+    "I am anxious, tense, and overworked.",
+    "The constant pressure is overwhelming me.",
+    "I feel mentally exhausted and frazzled."
+  ],
+        'neutral': [
+    "I am going to the store later today.",
+    "The meeting is scheduled for tomorrow.",
+    "Please send me the report by Friday.",
+    "The weather is cloudy today.",
+    "I will be working from home tomorrow.",
+    "The package arrived this morning.",
+    "Can you pass me the salt?",
+    "The train leaves at 3 PM.",
+    "I need to buy some groceries.",
+    "The document is on your desk.",
+    "Please confirm your attendance.",
+    "The door is closed right now.",
+    "I have a doctor's appointment.",
+    "The computer needs to be restarted.",
+    "Can you help me with this task?",
+    "The phone is ringing in the other room.",
+    "I will call you back later.",
+    "The coffee machine is broken.",
+    "Please review the attached file.",
+    "The elevator is out of service.",
+    "I need to finish this assignment.",
+    "The printer is out of paper.",
+    "Can we reschedule our meeting?",
+    "The parking lot is full today.",
+    "I am reading a book right now.",
+    
+    "The bus arrives at 8 AM every day.",
+    "I need to pick up my laundry.",
+    "The classroom is on the second floor.",
+    "The restaurant opens at 10 AM.",
+    "I am checking my emails.",
+    "The package was delivered yesterday.",
+    "I need to water the plants.",
+    "The train is delayed by 15 minutes.",
+    "I will go for a walk after lunch.",
+    "The fridge is full of groceries.",
+    "I need to pay my bills today.",
+    "The document needs to be signed.",
+    "I am writing a letter to my friend.",
+    "The store closes at 9 PM.",
+    "I will clean my room later.",
+    "The cat is sleeping on the sofa.",
+    "I need to buy a new notebook.",
+    "The bus stop is near my house.",
+    "I am drinking a cup of tea.",
+    "The package will arrive tomorrow.",
+    "I am looking for my keys.",
+    "The office opens at 9 AM.",
+    "I need to charge my phone.",
+    "The street is empty right now.",
+    "I am making a shopping list.",
+    
+    "The lecture starts at 2 PM.",
+    "I need to organize my desk.",
+    "The light in the kitchen is broken.",
+    "I am cooking dinner tonight.",
+    "The library closes at 6 PM.",
+    "I am reading the newspaper.",
+    "The bus ticket costs $2.",
+    "I need to schedule an appointment.",
+    "The train station is crowded today.",
+    "I am folding my laundry.",
+    "The water in the tank is clean.",
+    "I am brushing my teeth.",
+    "The computer is running slowly.",
+    "I need to replace the batteries.",
+    "The mail has arrived this morning.",
+    "I am setting up my workspace.",
+    "The shop is near the park.",
+    "I need to organize my files.",
+    "The clock shows 5 PM.",
+    "I am drinking a glass of water.",
+    "The phone needs to be charged.",
+    "I am checking the weather forecast.",
+    "The store has new arrivals today.",
+    "I need to write a to-do list.",
+    "The bus is empty right now.",
+    
+    "I am making a cup of coffee.",
+    "The elevator is currently working.",
+    "I am sending an email to my manager.",
+    "The laptop is on the desk.",
+    "I need to update my calendar.",
+    "The package is on the doorstep.",
+    "I am planning my schedule for tomorrow.",
+    "The train leaves on time today.",
+    "I need to fix the chair in the office.",
+    "The meeting room is available now.",
+    "I am preparing breakfast.",
+    "The documents are on the shelf.",
+    "I need to wash my car.",
+    "The lights in the room are bright.",
+    "I am checking the traffic before leaving.",
+    "The appointment is scheduled for next week.",
+    "I need to refill my water bottle.",
+    "The shoes are under the bed.",
+    "I am cleaning the kitchen counter.",
+    "The newspaper is on the table.",
+    "I need to fold the blankets.",
+    "The bus stop is five minutes away.",
+    "I am writing notes for my project.",
+    "The clock on the wall is ticking.",
+    "I need to organize my wardrobe.",
+    
+    "The pen is on the desk.",
+    "I am opening the window for fresh air.",
+    "The refrigerator is stocked with food.",
+    "I need to fix the door handle.",
+    "The book is on the top shelf.",
+    "I am ironing my clothes.",
+    "The printer is working properly now.",
+    "I need to set an alarm for tomorrow.",
+    "The car is parked outside.",
+    "I am taking notes from the lecture.",
+    "The calendar shows today’s date.",
+    "I need to sweep the floor.",
+    "The TV is turned off.",
+    "I am making a shopping plan.",
+    "The meeting will start in ten minutes.",
+    "I need to charge my laptop.",
+    "The chair is next to the table.",
+    "I am listening to a podcast.",
+    "The bottle is half full.",
+    "I need to clean the windows.",
+    "The bus will arrive in five minutes.",
+    "I am checking my bank account.",
+    "The documents need to be filed.",
+    "I need to water the flowers.",
+    "The car keys are on the kitchen counter.",
+    
+    "I am washing the dishes.",
+    "The clock shows 12 noon.",
+    "I need to organize my books.",
+    "The train platform is empty.",
+    "I am updating my contact list.",
+    "The weather forecast predicts rain.",
+    "I need to pick up groceries from the market.",
+    "The phone is on silent mode.",
+    "I am preparing lunch.",
+    "The windows need to be cleaned.",
+    "I need to take out the trash.",
+    "The bus timetable is displayed outside.",
+    "I am writing a letter.",
+    "The room is well-lit.",
+    "I need to check my emails again.",
+    "The car is clean and parked.",
+    "I am making notes for my assignment.",
+    "The traffic light is green.",
+    "I need to refill the ink in the printer.",
+    "The keys are in my pocket.",
+    "I am checking the oven temperature.",
+    "The door is locked.",
+    "I need to water the plants in the garden.",
+    "The lecture notes are on the desk.",
+    "I am organizing my files and folders.",
+    
+    "I need to vacuum the carpet.",
+    "The train is delayed by ten minutes.",
+    "I am checking the mailbox.",
+    "The documents are stacked neatly.",
+    "I need to take my umbrella.",
+    "The fridge has enough food for the week.",
+    "I am cleaning my desk drawer.",
+    "The clock is running fast.",
+    "I need to pick up the kids from school.",
+    "The windows are closed.",
+    "I am checking the printer paper.",
+    "The elevator is working properly.",
+    "I need to finish my homework.",
+    "The park is near my house.",
+    "I am folding the laundry.",
+    "The store opens at 9 AM.",
+    "I need to organize my workspace.",
+    "The package has been delivered.",
+    "I am cooking dinner for my family.",
+    "The keys are on the counter.",
+    "I need to set a reminder for the meeting.",
+    "The bus leaves in fifteen minutes.",
+    "I am making coffee in the kitchen.",
+    "The laptop battery is low.",
+    "I need to clean the floor.",
+
+    "I am arranging my books on the shelf.",
+    "The room temperature is comfortable.",
+    "I need to write a grocery list.",
+    "The car needs fuel.",
+    "I am checking my schedule for the week.",
+    "The lights are turned on.",
+    "I need to charge my phone.",
+    "The printer is ready to print.",
+    "I am washing my hands.",
+    "The calendar is updated.",
+    "I need to clean the bathroom.",
+    "The package is in the mailbox.",
+    "I am sorting my documents.",
+    "The phone is on the table.",
+    "I need to organize my wardrobe.",
+    "The train arrives on time.",
+    "I am folding the clothes.",
+    "The bus stop is nearby.",
+    "I need to refill my water bottle.",
+    "The laptop is on the desk.",
+    "I am checking the weather.",
+    "The keys are on the table.",
+    "I need to prepare my notes for the class.",
+    "The street is empty now.",
+    "I am reading a chapter of my book."
+  ]
+    }
+    
+    # Convert to DataFrame
+    texts = []
+    emotions = []
+    
+    for emotion, text_list in data.items():
+        texts.extend(text_list)
+        emotions.extend([emotion] * len(text_list))
+    
+    df = pd.DataFrame({
+        'text': texts,
+        'emotion': emotions
+    })
+    
+    # Shuffle the dataset
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+    
+    return df
+
+
+def train_and_evaluate_models(X_train, X_test, y_train, y_test):
+    """
+    Train and evaluate multiple ML models for emotion classification.
+    
+    Args:
+        X_train, X_test: Training and testing features
+        y_train, y_test: Training and testing labels
+        
+    Returns:
+        dict: Model performance metrics
+        best_model: The best performing model
+        vectorizer: TF-IDF vectorizer
+    """
+    
+    # Initialize TF-IDF Vectorizer
+    vectorizer = TfidfVectorizer(
+        max_features=3000,
+        ngram_range=(1, 2),
+        min_df=1,
+        max_df=0.95,
+        sublinear_tf=True
+    )
+    
+    # Fit and transform training data
+    X_train_tfidf = vectorizer.fit_transform(X_train)
+    X_test_tfidf = vectorizer.transform(X_test)
+    
+    print(f"TF-IDF Matrix Shape: {X_train_tfidf.shape}")
+    print(f"Vocabulary Size: {len(vectorizer.vocabulary_)}")
+    
+    # Define models to evaluate
+    models = {
+        'Logistic Regression': LogisticRegression(
+            max_iter=1000, 
+            random_state=42,
+            C=1.0,
+            solver='lbfgs',
+        ),
+        'Support Vector Machine': SVC(
+            kernel='linear',
+            C=1.0,
+            probability=True,
+            random_state=42
+        ),
+        'Random Forest': RandomForestClassifier(
+            n_estimators=100,
+            max_depth=15,
+            min_samples_split=2,
+            random_state=42,
+            n_jobs=-1
+        ),
+        'Multinomial Naive Bayes': MultinomialNB(
+            alpha=0.1
+        )
+    }
+    
+    results = {}
+    best_f1 = 0
+    best_model = None
+    best_model_name = ""
+    
+    print("\n" + "="*80)
+    print("MODEL TRAINING AND EVALUATION")
+    print("="*80)
+    
+    for name, model in models.items():
+        print(f"\n{'-'*60}")
+        print(f"Training: {name}")
+        print('-'*60)
+        
+        # Train the model
+        model.fit(X_train_tfidf, y_train)
+        
+        # Make predictions
+        y_pred = model.predict(X_test_tfidf)
+        
+        # Calculate metrics
+        accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, average='weighted', zero_division=0)
+        recall = recall_score(y_test, y_pred, average='weighted', zero_division=0)
+        f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+        
+        # Cross-validation score
+        cv_scores = cross_val_score(model, X_train_tfidf, y_train, cv=3, scoring='f1_weighted')
+        
+        results[name] = {
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall,
+            'f1_score': f1,
+            'cv_f1_mean': cv_scores.mean(),
+            'cv_f1_std': cv_scores.std()
+        }
+        
+        print(f"Accuracy:  {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall:    {recall:.4f}")
+        print(f"F1-Score:  {f1:.4f}")
+        print(f"CV F1:     {cv_scores.mean():.4f} (+/- {cv_scores.std()*2:.4f})")
+        
+        # Track best model
+        if f1 > best_f1:
+            best_f1 = f1
+            best_model = model
+            best_model_name = name
+    
+    print("\n" + "="*80)
+    print(f"BEST MODEL: {best_model_name} (F1-Score: {best_f1:.4f})")
+    print("="*80)
+    
+    # Detailed classification report for best model
+    print("\nDetailed Classification Report:")
+    print(classification_report(y_test, best_model.predict(X_test_tfidf)))
+    
+    return results, best_model, vectorizer, best_model_name
+
+
+def save_model(model, vectorizer, model_name, output_dir='../backend/model'):
+    """
+    Save the trained model and vectorizer.
+    
+    Args:
+        model: Trained ML model
+        vectorizer: TF-IDF vectorizer
+        model_name: Name of the model
+        output_dir: Directory to save models
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Save model using pickle
+    model_path = os.path.join(output_dir, 'emotion_model.pkl')
+    with open(model_path, 'wb') as f:
+        pickle.dump(model, f)
+    
+    # Save vectorizer
+    vectorizer_path = os.path.join(output_dir, 'tfidf_vectorizer.pkl')
+    with open(vectorizer_path, 'wb') as f:
+        pickle.dump(vectorizer, f)
+    
+    # Save model info
+    info = {
+        'model_name': model_name,
+        'model_type': type(model).__name__,
+        'vocab_size': len(vectorizer.vocabulary_)
+    }
+    
+    info_path = os.path.join(output_dir, 'model_info.pkl')
+    with open(info_path, 'wb') as f:
+        pickle.dump(info, f)
+    
+    print(f"\nModel saved to: {model_path}")
+    print(f"Vectorizer saved to: {vectorizer_path}")
+    print(f"Model info saved to: {info_path}")
+
+
+def main():
+    """Main execution function."""
+    
+    print("="*80)
+    print("EMOTION DETECTION MODEL TRAINING PIPELINE")
+    print("="*80)
+    
+    # Create dataset
+    print("\n[1/5] Creating emotion dataset...")
+    df = create_sample_dataset()
+    print(f"Dataset created with {len(df)} samples")
+    print(f"Emotion distribution:\n{df['emotion'].value_counts()}")
+    
+    # Save raw dataset
+    os.makedirs('../data', exist_ok=True)
+    df.to_csv('../data/emotion_dataset.csv', index=False)
+    print(f"Dataset saved to: ../data/emotion_dataset.csv")
+    
+    # Preprocess text
+    print("\n[2/5] Preprocessing text data...")
+    df['processed_text'] = df['text'].apply(preprocess_text)
+    
+    # Remove empty texts
+    df = df[df['processed_text'].str.len() > 0]
+    print(f"Samples after preprocessing: {len(df)}")
+    
+    # Split data
+    print("\n[3/5] Splitting data into train/test sets...")
+    X = df['processed_text']
+    y = df['emotion']
+    
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+    
+    print(f"Training samples: {len(X_train)}")
+    print(f"Testing samples: {len(X_test)}")
+    
+    # Train and evaluate models
+    print("\n[4/5] Training and evaluating models...")
+    results, best_model, vectorizer, best_model_name = train_and_evaluate_models(
+        X_train, X_test, y_train, y_test
+    )
+    
+    # Save model
+    print("\n[5/5] Saving best model...")
+    save_model(best_model, vectorizer, best_model_name)
+    
+    # Summary
+    print("\n" + "="*80)
+    print("TRAINING COMPLETE")
+    print("="*80)
+    print(f"\nBest Model: {best_model_name}")
+    print(f"Final F1-Score: {results[best_model_name]['f1_score']:.4f}")
+    print(f"Final Accuracy: {results[best_model_name]['accuracy']:.4f}")
+    print("\nModel files saved in: ../backend/model/")
+    print("  - emotion_model.pkl")
+    print("  - tfidf_vectorizer.pkl")
+    print("  - model_info.pkl")
+
+
+if __name__ == "__main__":
+    main()
